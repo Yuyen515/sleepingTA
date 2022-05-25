@@ -18,6 +18,7 @@ typedef struct Students
 	int sid;   //學生id
 	int times; //學生來排隊的次數
 	int chair; // 學生是否佔有椅子(1:有椅子 0:沒椅子)
+	int kick;  //學生是否被趕走(1:是 0:否)
 } STU;
 
 struct Teacher
@@ -36,7 +37,6 @@ struct Teacher *TA;
 
 int wait_number[NUM_OF_CHAIRS];
 int student_being_served; //助教教學中的學生
-int kick;				  //學生是否被趕走(1:是 0:否)
 
 //判斷座位是否全空
 int isEmpty()
@@ -172,6 +172,7 @@ void createStudent()
 		student[i]->sid = i + 1;  //學生ID
 		student[i]->times = 0;	  //學生一開始的訪問次數為0
 		student[i]->chair = 0;	  //學生一開始都不在椅子上
+		student[i]->kick = 0;
 		pthread_create(&thread_students[i], NULL, behavior_student, (void *)student_ptr);
 		/*建立執行緒，
 		第一個引數為指向執行緒識別符號的指標。
@@ -204,7 +205,6 @@ void *behavior_student(void *student)
 		pthread_mutex_lock(&mutex); //搶互斥鎖(要搶到才能操作座位)
 		printf("student %c come\n", each_student->sid + 64);
 		each_student->times++; //學生來訪次數+1
-
 		if (!isFull())
 		{
 			enQueue((*each_student).sid); //將學生ID放入座位
@@ -218,13 +218,17 @@ void *behavior_student(void *student)
 			while (sem_trywait(&ta) == -1 && (*each_student).chair == 1)
 			{
 			}
-
 			//如果學生有椅子，代表他成功搶到助教，所以可以問助教問題。
 			if ((*each_student).chair == 1)
 			{
+
 				student_being_served = each_student->sid;
 				sleep(5);
-				printf("student %c finish asking\n", (*each_student).sid + 64);
+				if (each_student->kick == 0)
+				{ //學生沒被趕走才印這行
+					printf("student %c finish asking\n", (*each_student).sid + 64);
+				}
+				each_student->kick = 0; //學生重新等待，kick值歸零
 				srand(time(NULL));
 				sleep(random(5, 15));
 			}
@@ -255,10 +259,15 @@ void *behavior_student(void *student)
 				{
 					student_being_served = each_student->sid;
 					sleep(5);
-					printf("student %c finish asking\n", (*each_student).sid + 64);
+					if (each_student->kick == 0)
+					{ //學生沒被趕走才印這行
+						printf("student %c finish asking\n", (*each_student).sid + 64);
+					}
+					each_student->kick = 0; //學生重新等待，kick值歸零
 					srand(time(NULL));
 					sleep(random(5, 15));
 				}
+				//學生沒椅子，代表椅子被搶，所以離開一陣子。
 				else
 				{
 					srand(time(NULL));
@@ -296,6 +305,7 @@ void *behavior_TA(void *TA)
 		srand(time(NULL));
 		if (random(1, 5) == 1) // random trigger the event (20% probability)
 		{
+			student[student_being_served - 1]->kick = 1; //將學生的kick值設為1
 			printf("Ta has meeting later,told student %c to go.\n", student_being_served + 64);
 			printf("student %c leave for a while\n", student_being_served + 64);
 			printf("Ta is meeting.\n");
